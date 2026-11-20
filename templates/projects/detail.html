@@ -1,0 +1,72 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+
+<div class="card dash-hero mb-3">
+  <div class="small text-muted">{{ project.city }}{% if project.plot_length_ft %} · Plot {{ project.plot_length_ft|floatformat:"-1" }} × {{ project.plot_width_ft|floatformat:"-1" }} ft{% endif %}</div>
+  <h1>{{ project.name }}</h1>
+  <div class="small mb-2">{% tr project.get_project_type_display %}{% if summary %} · {{ summary.rooms|length }} {% tr "room(s)" %} · {{ summary.covered_area_sqft }} sq ft{% endif %} · {% t lang "Brick walls, RCC slab" "Eent ki deewar, RCC lanter" "اینٹ کی دیوار، آر سی سی لینٹر" %}</div>
+  <div class="d-flex justify-content-between small mb-1">
+    <span>{% t lang "Progress" "Kaam kitna hua" "پیش رفت" %}</span><b>{{ done }} / {{ total_stages }} · {{ pct }}%</b>
+  </div>
+  <div class="progress-track"><div style="width: {{ pct }}%"></div></div>
+</div>
+
+{% if current %}
+<a class="card next-card mb-3" href="{% url 'check_stage' project.pk current.ps.stage %}">
+  <div class="ico">📷</div>
+  <div class="flex-fill">
+    <div class="small text-muted">{% t lang "Next step" "Agla qadam" "اگلا قدم" %}</div>
+    <b>{% stage project current.ps.stage %}</b>
+    <div class="small">{{ current.checked }} / {{ current.total }} {% t lang "checks done" "checks ho gaye" "جانچ مکمل" %}
+      {% if current.red %} · <span class="text-danger">{{ current.red }} {% t lang "problem(s)" "masle" "مسئلے" %}</span>{% endif %}</div>
+  </div>
+  <div class="fs-4">›</div>
+</a>
+{% endif %}
+
+<div class="row g-2 mb-1">
+  <div class="col-4"><div class="card stat"><div class="v">{{ summary.covered_area_sqft|default:"-" }}</div><div class="l">sq ft</div></div></div>
+  <div class="col-4"><div class="card stat">
+    <div class="v">{% if estimate_total %}{{ estimate_total|rs_short }}{% else %}—{% endif %}</div>
+    <div class="l">{% if rates_missing %}<a href="{% url 'materials' project.pk %}">{% t lang "Add rates" "Rates likhein" "ریٹ لکھیں" %}</a>{% else %}{% t lang "Material estimate" "Material andaza" "سامان کا اندازہ" %}{% endif %}</div></div></div>
+  <div class="col-4"><div class="card stat"><div class="v">{{ paid|rs_short }}</div><div class="l">{% t lang "Paid so far" "Ab tak diya" "اب تک ادا" %}</div></div></div>
+</div>
+{% if project.budget_pkr %}<div class="small text-muted px-1 mb-2">{% t lang "Budget" "Budget" "بجٹ" %}: {{ project.budget_pkr|rs }}{% if project.start_date %} · {% t lang "Start" "Shuru" "شروع" %}: {{ project.start_date|date:"d M Y" }}{% endif %}</div>{% endif %}
+
+<div class="section-title">{% t lang "Tools" "Auzaar" "اوزار" %}</div>
+<div class="row g-2 mb-2">
+  <div class="col-6"><a class="card tile" href="{% url 'chat' project.pk %}"><span class="ico">💬</span><b>{% t lang "Ask the assistant" "Assistant se poochein" "اسسٹنٹ سے پوچھیں" %}</b><span>{% t lang "Type or speak" "Likhein ya bolein" "لکھیں یا بولیں" %} 🎤</span></a></div>
+  <div class="col-6"><a class="card tile" href="{% url 'plan_editor' project.pk %}"><span class="ico">📐</span><b>{% tr "Plan" %}</b><span>{% t lang "Drawing + PDF" "Drawing + PDF" "ڈرائنگ اور پی ڈی ایف" %}</span></a></div>
+  <div class="col-6"><a class="card tile" href="{% url 'materials' project.pk %}"><span class="ico">🧮</span><b>{% tr "Material" %}</b><span>{% t lang "Quantity + cost" "Miqdaar + lagat" "مقدار اور لاگت" %}</span></a></div>
+  <div class="col-6"><a class="card tile" href="{% url 'diary' project.pk %}"><span class="ico">📒</span><b>{% tr "Diary" %}</b><span>{% t lang "Material, payments" "Maal, payments" "سامان، ادائیگی" %}</span></a></div>
+</div>
+
+<div class="section-title">{% t lang "Work stages" "Kaam ke stages" "کام کے مراحل" %}</div>
+<div class="timeline">
+{% for s in stages %}
+  <div class="tl-item {% if s.ps.status == 'done' %}done{% elif s.ps.stage == project.current_stage %}now{% endif %}">
+    <span class="tl-dot"></span>
+    <div class="card">
+      <div class="d-flex justify-content-between align-items-center gap-2">
+        <a href="{% url 'check_stage' project.pk s.ps.stage %}" class="text-decoration-none text-dark flex-fill">
+          <b>{% stage project s.ps.stage %}</b>
+          <div class="small text-muted">{% tr s.ps.get_status_display %} · {{ s.checked }}/{{ s.total }}
+            {% if s.green %}<span class="dot green"></span> {{ s.green }}{% endif %}
+            {% if s.yellow %}<span class="dot yellow"></span> {{ s.yellow }}{% endif %}
+            {% if s.red %}<span class="dot red"></span> {{ s.red }}{% endif %}</div>
+        </a>
+        <form method="post" action="{% url 'stage_status' project.pk s.ps.stage %}" class="m-0">{% csrf_token %}
+          {% if s.ps.status == "not_started" %}<button name="status" value="in_progress" class="btn btn-sm btn-outline-dark">{% t lang "Start" "Shuru" "شروع" %}</button>
+          {% elif s.ps.status == "in_progress" %}<button name="status" value="done" class="btn btn-sm btn-brand" {% if s.red %}onclick="return confirm('{% t lang "This stage has a red result. Mark done anyway?" "Is stage mein laal result hai. Phir bhi mukammal?" "اس مرحلے میں لال نتیجہ ہے۔ پھر بھی مکمل؟" %}')"{% endif %}>✔ {% t lang "Done" "Mukammal" "مکمل" %}</button>
+          {% else %}<button name="status" value="in_progress" class="btn btn-sm btn-link text-muted">{% t lang "Reopen" "Wapas kholein" "دوبارہ کھولیں" %}</button>{% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+{% endfor %}
+</div>
+<p class="small text-muted mt-2"><a href="{% url 'rules_list' project.pk %}">{% t lang "See all rules" "Tamam rules dekhein" "تمام رولز دیکھیں" %}</a> · {% t lang "Results mean 'no problem seen in this photo', never 'safe'." "Nateeja ka matlab 'is tasveer mein masla nazar nahi aaya' hai, 'safe' nahi." "نتیجے کا مطلب 'اس تصویر میں مسئلہ نظر نہیں آیا' ہے، 'محفوظ' نہیں۔" %}</p>
+{% endwith %}
+{% endblock %}

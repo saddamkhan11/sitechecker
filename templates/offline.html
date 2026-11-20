@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load cc %}
+{% block content %}
+<div class="text-center py-5">
+  <div style="font-size:56px">📶</div>
+  <h1 class="h4">{% tr "No internet" %}</h1>
+  <p>{% tr "Photos you took are kept on the phone and upload by themselves when the signal comes back." %}</p>
+  <button class="btn btn-brand" onclick="location.reload()">{% tr "Try again" %}</button>
+</div>
+{% endblock %}

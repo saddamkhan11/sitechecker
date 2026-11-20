@@ -1,0 +1,197 @@
+{% extends "base.html" %}{% load static cc %}
+{% block title %}Plan{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h5 m-0">{% t lang "Plan" "Naqsha" "نقشہ" %} <small class="text-muted">v<span id="ver">{{ plan.version }}</span> · <span id="area"></span></small></h1>
+  <a class="btn btn-sm btn-outline-dark" href="{% url 'plan_print' project.pk %}">🖨 PDF</a>
+</div>
+<p class="small text-muted mb-2">{% t lang "Drag rooms (they snap to share a wall) and drag doors/windows along their wall. Or just ask in the chat: 'ek washroom aur add karo'." "Kamron ko kheenchein (deewar se jur jayenge), darwaze/khirkiyan deewar ke saath kheenchein. Ya chat mein kahein: 'ek washroom aur add karo'." "کمروں کو کھینچیں (دیوار سے جڑ جائیں گے)، دروازے/کھڑکیاں دیوار کے ساتھ کھینچیں۔ یا چیٹ میں کہیں: 'ایک واش روم اور شامل کرو'۔" %}</p>
+
+<svg id="plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+<div id="findings" class="card p-2 my-2 small"></div>
+
+<div class="d-flex gap-2 mb-2">
+  <button type="button" class="btn btn-sm btn-outline-dark flex-fill" id="arrange">✨ {% t lang "Auto-arrange rooms" "Khud tarteeb dein" "خود ترتیب دیں" %}</button>
+  <button type="button" class="btn btn-sm btn-outline-dark flex-fill" id="auto-open">🚪 {% t lang "Add missing doors/windows" "Darwaze/khirkiyan khud lagayein" "دروازے/کھڑکیاں خود لگائیں" %}</button>
+</div>
+
+<div class="card p-2 mb-2">
+  <b class="small">{% t lang "Rooms" "Kamre" "کمرے" %}</b>
+  <table class="table table-sm small mb-1 align-middle">
+    <thead><tr><th>{% t lang "Name" "Naam" "نام" %}</th><th>{% t lang "Type" "Qism" "قسم" %}</th><th>L ft</th><th>W ft</th><th></th></tr></thead>
+    <tbody id="room-rows"></tbody>
+  </table>
+  <div class="d-flex flex-wrap gap-1">
+    {% for k, label in room_types %}<button type="button" class="btn btn-sm btn-outline-secondary add-room" data-type="{{ k }}">+ {{ label }}</button>{% endfor %}
+  </div>
+</div>
+
+<div class="card p-2 mb-2">
+  <div class="row g-2 small">
+    <div class="col-6"><label class="form-label mb-0">{% t lang "Plot front (ft)" "Plot ka samna (ft)" "پلاٹ کا سامنا (فٹ)" %}</label><input id="plot-L" type="number" inputmode="decimal" class="form-control form-control-sm" placeholder="-"></div>
+    <div class="col-6"><label class="form-label mb-0">{% t lang "Plot depth (ft)" "Plot ki gehrai (ft)" "پلاٹ کی گہرائی (فٹ)" %}</label><input id="plot-W" type="number" inputmode="decimal" class="form-control form-control-sm" placeholder="-"></div>
+    <div class="col-6"><label class="form-label mb-0">{% t lang "Wall thickness (in)" "Deewar ki motai (in)" "دیوار کی موٹائی (انچ)" %}</label><input id="T" type="number" inputmode="decimal" step="0.5" class="form-control form-control-sm"></div>
+  </div>
+</div>
+
+<div class="card p-2 mb-2">
+  <b class="small">{% t lang "Doors and windows" "Darwaze aur khirkiyan" "دروازے اور کھڑکیاں" %}</b>
+  <table class="table table-sm small mb-1 align-middle">
+    <thead><tr><th>ID</th><th>{% t lang "Room" "Kamra" "کمرہ" %}</th><th>{% t lang "Wall" "Deewar" "دیوار" %}</th><th>{% t lang "From corner" "Kone se" "کونے سے" %}</th><th>W in</th><th>H in</th><th></th></tr></thead>
+    <tbody id="op-rows"></tbody>
+  </table>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="add-door">+ {% t lang "Door" "Darwaza" "دروازہ" %}</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="add-window">+ {% t lang "Window" "Khirki" "کھڑکی" %}</button>
+  </div>
+  <div class="small text-muted mt-1">N = {% t lang "top" "upar" "اوپر" %}, S = {% t lang "bottom / front" "neeche / samna" "نیچے / سامنا" %}, E = {% t lang "right" "daayein" "دائیں" %}, W = {% t lang "left" "baayein" "بائیں" %}.</div>
+</div>
+
+<button id="save" class="btn btn-brand btn-lg w-100">{% t lang "Save plan" "Naqsha save karein" "نقشہ محفوظ کریں" %}</button>
+<div id="save-msg" class="small text-center mt-1"></div>
+{{ plan_data|json_script:"plan-data" }}
+{{ findings|json_script:"findings-data" }}
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/plan.js' %}?v={{ sv }}"></script>
+<script>
+(function () {
+  var lang = '{{ ui_lang }}';
+  function ftext(f) { return lang === 'both' ? (f.en + (f.ur ? ' · ' + f.ur : '')) : (f[lang] || f.roman || f.en); }
+  var plan = PlanDrawing.normalize(JSON.parse(document.getElementById('plan-data').textContent));
+  var svg = document.getElementById('plan-svg');
+  var csrf = '{{ csrf_token }}';
+  var $ = function (id) { return document.getElementById(id); };
+  var ROOM_TYPES = [{% for k, label in room_types %}['{{ k }}', '{{ label }}']{% if not forloop.last %},{% endif %}{% endfor %}];
+
+  function post(url, body) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  function showFindings(list, summary) {
+    var box = $('findings'); box.innerHTML = '';
+    list.forEach(function (f) {
+      var d = document.createElement('div'); d.className = 'finding-' + f.level + (lang === 'ur' ? ' urdu' : '');
+      d.textContent = (f.level === 'ok' ? '✔ ' : f.level === 'error' ? '✖ ' : '⚠ ') + ftext(f) + (f.rule_id ? ' [' + f.rule_id + ']' : '');
+      box.appendChild(d);
+    });
+    if (summary) $('area').textContent = summary.covered_area_sqft + ' sq ft';
+  }
+  function setInputs() {
+    $('plot-L').value = plan.plot ? Math.round(plan.plot.length_in / 12 * 10) / 10 : '';
+    $('plot-W').value = plan.plot ? Math.round(plan.plot.width_in / 12 * 10) / 10 : '';
+    $('T').value = plan.wall_in;
+  }
+  function opt(list, val) { return list.map(function (x) { var v = x[0] !== undefined ? x[0] : x, l = x[1] || x; return '<option value="' + v + '"' + (v === val ? ' selected' : '') + '>' + l + '</option>'; }).join(''); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function rows() {
+    var rb = $('room-rows'); rb.innerHTML = '';
+    plan.rooms.forEach(function (r, i) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><input class="form-control form-control-sm" data-k="name" value="' + esc(r.name) + '"></td>' +
+        '<td><select class="form-select form-select-sm" data-k="type">' + opt(ROOM_TYPES, r.type) + '</select></td>' +
+        '<td><input class="form-control form-control-sm" type="number" step="0.5" data-k="length_in" value="' + (r.length_in / 12) + '"></td>' +
+        '<td><input class="form-control form-control-sm" type="number" step="0.5" data-k="width_in" value="' + (r.width_in / 12) + '"></td>' +
+        '<td><button class="btn btn-sm btn-link text-danger p-0" data-del>✖</button></td>';
+      tr.querySelectorAll('[data-k]').forEach(function (inp) {
+        inp.onchange = function () {
+          var k = inp.dataset.k;
+          r[k] = (k === 'name' || k === 'type') ? inp.value : (parseFloat(inp.value) || 1) * 12;
+          changed();
+        };
+      });
+      tr.querySelector('[data-del]').onclick = function () {
+        if (plan.rooms.length === 1) return;
+        plan.openings = plan.openings.filter(function (o) { return o.room !== r.id; });
+        plan.rooms.splice(i, 1); changed();
+      };
+      rb.appendChild(tr);
+    });
+    var ob = $('op-rows'); ob.innerHTML = '';
+    var roomOpts = plan.rooms.map(function (r) { return [r.id, r.name]; });
+    plan.openings.forEach(function (o, i) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + o.id + '</td>' +
+        '<td><select class="form-select form-select-sm" data-k="room">' + opt(roomOpts, o.room) + '</select></td>' +
+        '<td><select class="form-select form-select-sm" data-k="wall">' + opt(['N', 'S', 'E', 'W'], o.wall) + '</select></td>' +
+        '<td><input class="form-control form-control-sm" type="number" data-k="offset_in" value="' + o.offset_in + '"></td>' +
+        '<td><input class="form-control form-control-sm" type="number" data-k="width_in" value="' + o.width_in + '"></td>' +
+        '<td><input class="form-control form-control-sm" type="number" data-k="height_in" value="' + o.height_in + '"></td>' +
+        '<td><button class="btn btn-sm btn-link text-danger p-0" data-del>✖</button></td>';
+      tr.querySelectorAll('[data-k]').forEach(function (inp) {
+        inp.onchange = function () {
+          var k = inp.dataset.k; o[k] = (k === 'wall' || k === 'room') ? inp.value : parseFloat(inp.value) || 0;
+          var r = PlanDrawing.roomById(plan, o.room);
+          o.offset_in = Math.max(0, Math.min(o.offset_in, PlanDrawing.wallLen(r, o.wall) - o.width_in));
+          changed();
+        };
+      });
+      tr.querySelector('[data-del]').onclick = function () { plan.openings.splice(i, 1); changed(); };
+      ob.appendChild(tr);
+    });
+  }
+  var timer = null;
+  function liveCheck() {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      if (!navigator.onLine) return;
+      post('{% url "plan_check" project.pk %}', plan).then(function (j) { if (j.findings) showFindings(j.findings, j.summary); }).catch(function () {});
+    }, 500);
+  }
+  function draw() { PlanDrawing.render(svg, plan, { editable: true, onChange: function () { rows(); liveCheck(); } }); }
+  function changed() { draw(); rows(); liveCheck(); $('save-msg').textContent = '{% t lang "Not saved yet" "Abhi save nahi hua" "ابھی محفوظ نہیں ہوا" %}'; }
+
+  ['plot-L', 'plot-W', 'T'].forEach(function (id) {
+    $(id).onchange = function () {
+      var L = parseFloat($('plot-L').value), W = parseFloat($('plot-W').value);
+      plan.plot = (L > 0 && W > 0) ? { length_in: L * 12, width_in: W * 12 } : null;
+      plan.wall_in = parseFloat($('T').value) || 9;
+      changed();
+    };
+  });
+  function nextId(prefix, list) { var n = 1; while (list.some(function (o) { return o.id === prefix + n; })) n++; return prefix + n; }
+  var DEF = { room: [12, 12], bedroom: [12, 12], living: [14, 12], kitchen: [10, 8], washroom: [7, 5], store: [6, 6] };
+  document.querySelectorAll('.add-room').forEach(function (b) {
+    b.onclick = function () {
+      var ty = b.dataset.type, d = DEF[ty] || [10, 10], bb = { x: 0, y: 0 };
+      plan.rooms.forEach(function (r) { bb.y = Math.max(bb.y, r.y_in + r.width_in); });
+      plan.rooms.push({ id: nextId('r', plan.rooms), name: b.textContent.replace('+', '').trim(), type: ty, x_in: plan.wall_in, y_in: bb.y + plan.wall_in, length_in: d[0] * 12, width_in: d[1] * 12 });
+      changed();
+    };
+  });
+  function addOpening(kind) {
+    var r = plan.rooms[plan.rooms.length - 1];
+    var o = { id: nextId(kind === 'door' ? 'd' : 'w', plan.openings), room: r.id, type: kind, wall: 'S', offset_in: 24, width_in: kind === 'door' ? 36 : 48, height_in: kind === 'door' ? 84 : 48 };
+    if (kind === 'window') o.sill_in = 36;
+    plan.openings.push(o); changed();
+  }
+  $('add-door').onclick = function () { addOpening('door'); };
+  $('add-window').onclick = function () { addOpening('window'); };
+  function arrange(mode) {
+    post('{% url "plan_arrange" project.pk %}?mode=' + mode, plan).then(function (j) {
+      if (!j.ok) { $('save-msg').textContent = j.error; return; }
+      plan = PlanDrawing.normalize(j.plan); setInputs(); changed(); showFindings(j.findings);
+    });
+  }
+  $('arrange').onclick = function () { arrange('layout'); };
+  $('auto-open').onclick = function () { arrange('openings'); };
+  $('save').onclick = function () {
+    $('save').disabled = true;
+    post('{% url "plan_save" project.pk %}', plan)
+      .then(function (j) {
+        if (!j.ok) { $('save-msg').textContent = j.error; return; }
+        $('ver').textContent = j.version; showFindings(j.findings, j.summary);
+        $('save-msg').textContent = '✔ v' + j.version;
+      })
+      .catch(function () { $('save-msg').textContent = 'Internet nahi. Dobara save karein.'; })
+      .finally(function () { $('save').disabled = false; });
+  };
+
+  setInputs(); draw(); rows();
+  showFindings(JSON.parse(document.getElementById('findings-data').textContent));
+  liveCheck();
+})();
+</script>
+{% endblock %}

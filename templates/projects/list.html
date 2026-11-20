@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}My projects{% endblock %}
+{% block content %}
+{% with lang=user.language %}
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <h1 class="h4 m-0 fw-bold">{% t lang "My projects" "Mere projects" "میرے پروجیکٹ" %}</h1>
+  {% if user.name %}<span class="small text-muted">👋 {{ user.name }}</span>{% endif %}
+</div>
+{% for p in projects %}
+  <a href="{% url 'project_detail' p.pk %}" class="card p-3 mb-2 text-decoration-none text-dark">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div>
+        <b>{{ p.name }}</b>
+        <div class="small text-muted">{{ p.city|default:"-" }} · {{ p.room_size_label }} · {{ p.created_at|date:"d M Y" }}</div>
+      </div>
+      {% if not p.onboarded %}<span class="badge bg-warning">{% t lang "Setup" "Sawal baqi" "سوال باقی" %}</span>
+      {% else %}<span class="badge bg-light text-dark">{% stage p %}</span>{% endif %}
+    </div>
+    {% if p.onboarded %}
+    <div class="d-flex align-items-center gap-2 mt-2">
+      <div class="flex-fill" style="height:8px;border-radius:999px;background:#efe8de;overflow:hidden"><div style="height:100%;width:{{ p.progress_pct }}%;background:linear-gradient(90deg,#ea580c,#fb923c)"></div></div>
+      <span class="small text-muted">{{ p.progress_pct }}%</span>
+    </div>
+    {% endif %}
+  </a>
+{% empty %}
+  <div class="card p-4 text-center mb-3">
+    <div style="font-size:44px">🏗️</div>
+    <b>{% t lang "No project yet" "Abhi koi project nahi" "ابھی کوئی پروجیکٹ نہیں" %}</b>
+    <div class="small text-muted">{% t lang "Start one: the assistant asks a few questions and draws the plan." "Shuru karein: assistant chand sawal pooch kar naqsha bana dega." "شروع کریں: اسسٹنٹ چند سوال پوچھ کر نقشہ بنا دے گا۔" %}</div>
+  </div>
+{% endfor %}
+<form method="post" action="{% url 'project_new' %}" class="mt-3">{% csrf_token %}
+  <button class="btn btn-brand btn-lg w-100">+ {% t lang "New project (room, washroom, house)" "Naya project (kamra, washroom, ghar)" "نیا پروجیکٹ (کمرہ، واش روم، گھر)" %}</button>
+</form>
+{% endwith %}
+{% endblock %}

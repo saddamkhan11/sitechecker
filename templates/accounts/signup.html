@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}Sign up{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{% tr "New account" %}</h1>
+<form method="post" class="card p-3">{% csrf_token %}
+  {% include "accounts/_form.html" %}
+  <button class="btn btn-brand btn-lg w-100">{% tr "Create account" %}</button>
+</form>
+<p class="mt-3 text-center">{% tr "Already have an account?" %} <a href="{% url 'login' %}">{% tr "Login" %}</a></p>
+{% endblock %}

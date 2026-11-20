@@ -1,0 +1,135 @@
+{% extends "base.html" %}{% load static cc %}
+{% block title %}{{ item.title_en }}{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+<a href="{% url 'check_stage' project.pk item.stage %}" class="small">← {% stage project item.stage %}</a>
+<h1 class="h5 mt-1 {% if ui_lang == 'ur' %}urdu{% endif %}">{% tfield item "title" %}</h1>
+
+{% if item.rule %}
+<div class="card p-2 mb-2 small">
+  <div><b>[{{ item.rule.rule_id }}]</b> {% if item.rule.value is not None %}<b>{{ item.rule.value.normalize }} {{ item.rule.unit }}</b> · {% endif %}{% if ui_lang != "ur" %}{{ item.rule.text_en }}{% endif %}</div>
+  {% if item.rule.text_ur and ui_lang != "en" and ui_lang != "roman" %}<div class="urdu">{{ item.rule.text_ur }}</div>{% endif %}
+</div>
+{% endif %}
+
+<div class="card p-3 mb-3">
+  <div class="small text-muted mb-1">{% if item.method == "photo" %}📷 {% t lang "Which photo to take" "Kaunsi tasveer lein" "کون سی تصویر لیں" %}{% else %}📏 {% t lang "How to measure" "Kaise naapein" "کیسے ناپیں" %}{% endif %}</div>
+  {% if ui_lang != "ur" %}<div>{{ item.photo_guide_en }}</div>{% endif %}
+  {% if item.photo_guide_ur and ui_lang != "en" and ui_lang != "roman" %}<div class="urdu">{{ item.photo_guide_ur }}</div>{% endif %}
+</div>
+
+<form id="check-form" method="post" action="{% url 'check_submit' project.pk item.code %}" enctype="multipart/form-data" class="card p-3 mb-3">{% csrf_token %}
+  <input type="hidden" name="captured_at" id="captured_at">
+  {% if item.method == "photo" %}
+    {% if not ai_on %}<div class="alert alert-secondary small py-1">{% t lang "AI is off: the photo is saved and marked yellow for manual review." "AI band hai: tasveer save hogi aur peeli (manual review) dikhegi." "اے آئی بند ہے: تصویر رکھ لی جائے گی اور پیلی دکھے گی۔" %}</div>{% endif %}
+    <div class="d-flex gap-2 mb-2" id="photo-buttons">
+      <button type="button" id="cam-btn" class="btn btn-brand btn-lg flex-fill">📷 {% tr "Camera" %}</button>
+      <button type="button" id="gal-btn" class="btn btn-outline-dark btn-lg flex-fill">🖼️ {% tr "Gallery" %}</button>
+    </div>
+    <div class="small text-muted mb-2">{% tr "Live camera photos get the server time. Gallery photos are marked 'not verified'." %}</div>
+    <img id="preview" class="img-fluid rounded mb-2 d-none" alt="">
+    <div id="photo-src" class="photo-src text-muted mb-2"></div>
+    <button id="send" class="btn btn-dark w-100 d-none">{% t lang "Check this photo" "Yeh tasveer check karein" "یہ تصویر چیک کریں" %}</button>
+  {% elif item.method == "measure" %}
+    {% for label in item.labels %}
+      <label class="form-label small mb-0">{% tr label %}</label>
+      <input name="m{{ forloop.counter0 }}" type="number" inputmode="decimal" step="any" required class="form-control form-control-lg mb-2">
+    {% endfor %}
+    <button class="btn btn-brand btn-lg w-100">{% t lang "Check" "Check karein" "چیک کریں" %}</button>
+  {% else %}
+    <input type="hidden" name="tilt" id="tilt">
+    <div class="tilt-meter" id="tilt-now">--°</div>
+    <div class="text-center small text-muted mb-2" id="tilt-help">{% t lang "Lean from vertical. Hold the phone flat on the wall." "Seedhe khade se jhukav. Phone deewar par seedha rakhein." "سیدھا کھڑے سے جھکاؤ۔ فون دیوار پر سیدھا رکھیں۔" %}</div>
+    <div class="d-flex gap-2 mb-2">
+      <button type="button" id="tilt-start" class="btn btn-outline-dark flex-fill">{% t lang "Start sensor" "Sensor chalayein" "سینسر چلائیں" %}</button>
+      <button type="button" id="tilt-read" class="btn btn-dark flex-fill" disabled>{% t lang "Read" "Read" "پڑھیں" %}</button>
+    </div>
+    <div class="small mb-2">{% t lang "Readings" "Readings" "ریڈنگز" %}: <span id="tilt-list">-</span></div>
+    <button id="tilt-send" class="btn btn-brand btn-lg w-100" disabled>{% t lang "Check" "Check karein" "چیک کریں" %}</button>
+  {% endif %}
+  <div id="form-msg" class="small mt-2"></div>
+</form>
+
+{% if history %}
+<h2 class="h6 text-muted">{% t lang "Earlier checks" "Pichle checks" "پچھلے چیک" %}</h2>
+{% for c in history %}
+<a href="{% url 'check_result' project.pk c.pk %}" class="card p-2 mb-1 text-decoration-none text-dark small result-card {{ c.status }}">
+  <div class="d-flex justify-content-between"><span><span class="dot {{ c.status }}"></span> {% tr c.get_status_display %}{% if c.photo_source == "gallery" %} · 🖼️{% endif %}</span><span class="text-muted">{{ c.created_at|date:"d M Y H:i" }}</span></div>
+  <div class="text-truncate">{{ c.reason }}</div>
+</a>
+{% endfor %}
+{% endif %}
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/camera.js' %}?v={{ sv }}"></script>
+<script>
+(function () {
+  var form = document.getElementById('check-form'), msg = document.getElementById('form-msg');
+  var urdu = '{{ project.language }}' === 'ur';
+  document.getElementById('captured_at').value = new Date().toISOString();
+
+  // ---- photo: live camera or gallery ----
+  var camBtn = document.getElementById('cam-btn');
+  if (camBtn) {
+    var blob = null, source = '', takenAt = '', preview = document.getElementById('preview'), send = document.getElementById('send');
+    var SRC = { camera: '📷 {% tr "Live camera" %}', camera_app: '📷 {% tr "Phone camera" %}', gallery: '🖼️ {% tr "From gallery (not verified)" %}' };
+    PhotoPicker.attach({
+      cameraBtn: camBtn, galleryBtn: document.getElementById('gal-btn'),
+      onPhoto: function (file, src, when) {
+        source = src; takenAt = when || '';
+        document.getElementById('captured_at').value = new Date().toISOString();
+        msg.textContent = '...';
+        OfflineQueue.shrink(file, 1280, 0.8).then(function (b) {
+          blob = b; preview.src = URL.createObjectURL(b); preview.classList.remove('d-none'); send.classList.remove('d-none');
+          document.getElementById('photo-src').textContent = SRC[src] + (src === 'gallery' && when ? ' · ' + new Date(when).toLocaleDateString() : '');
+          msg.textContent = Math.round(b.size / 1024) + ' KB';
+        });
+      }
+    });
+    form.onsubmit = function (e) {
+      e.preventDefault(); if (!blob) return;
+      send.disabled = true; msg.textContent = urdu ? 'بھیجا جا رہا ہے...' : 'Bheja ja raha hai...';
+      var fields = { csrfmiddlewaretoken: form.csrfmiddlewaretoken.value, captured_at: document.getElementById('captured_at').value,
+                     source: source, taken_at: takenAt };
+      OfflineQueue.submit(form.action, fields, blob).then(function (r) {
+        if (r.queued) {
+          msg.innerHTML = urdu ? '⏳ انٹرنیٹ نہیں۔ تصویر فون میں رکھی ہے، سگنل آتے ہی خود اپلوڈ ہو گی۔'
+                               : '⏳ Internet nahi. Tasveer phone mein rakhi hai, signal aate hi khud upload hogi.';
+          send.disabled = false;
+        } else if (r.data && r.data.ok) { location.href = r.data.url; }
+        else { msg.textContent = (r.data && r.data.error) || 'Error'; send.disabled = false; }
+      });
+    };
+  }
+
+  // ---- tilt (device orientation) ----
+  var start = document.getElementById('tilt-start');
+  if (start) {
+    var now = null, list = [], out = document.getElementById('tilt-now');
+    function lean(e) {
+      // Phone upright on the wall, screen facing you: beta ~ 90 when vertical; gamma shows sideways lean.
+      var b = e.beta, g = e.gamma;
+      if (b == null) return;
+      var dev = Math.max(Math.abs(90 - Math.abs(b)), 0);
+      now = Math.round(dev * 10) / 10;
+      out.textContent = now.toFixed(1) + '°';
+      out.style.color = now <= {{ item.rule.value|default:0.5 }} ? '#16a34a' : now <= {{ item.rule.value|default:0.5 }} * 2 ? '#ca8a04' : '#dc2626';
+    }
+    start.onclick = function () {
+      var go = function () { window.addEventListener('deviceorientation', lean); document.getElementById('tilt-read').disabled = false; };
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(function (s) { if (s === 'granted') go(); });
+      } else if ('DeviceOrientationEvent' in window) { go(); setTimeout(function () { if (now === null) msg.textContent = 'Is phone/browser mein tilt sensor nahi mila.'; }, 2500); }
+      else { msg.textContent = 'Tilt sensor not available.'; }
+    };
+    document.getElementById('tilt-read').onclick = function () {
+      if (now === null) return;
+      list.push(now); document.getElementById('tilt-list').textContent = list.join('°, ') + '°';
+      document.getElementById('tilt').value = list.join(',');
+      document.getElementById('tilt-send').disabled = false;
+    };
+  }
+})();
+</script>
+{% endblock %}

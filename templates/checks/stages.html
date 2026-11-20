@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}Checks{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+<h1 class="h5">{% t lang "Stage checks" "Stage checks" "مرحلہ وار جانچ" %}</h1>
+<p class="small text-muted">{% t lang "Green = no problem seen in this photo. Yellow = not sure, check again. Red = problem seen [GEN-01]." "Hara = is tasveer mein masla nazar nahi aaya. Peela = yaqeen nahi, dobara check. Laal = masla nazar aaya [GEN-01]." "ہرا = اس تصویر میں مسئلہ نظر نہیں آیا۔ پیلا = یقین نہیں، دوبارہ چیک۔ لال = مسئلہ نظر آیا [GEN-01]۔" %}</p>
+{% for s in stages %}
+<div class="card p-3 mb-2 {% if s.ps.stage == project.current_stage %}border border-2 border-warning{% endif %}">
+  <a class="text-decoration-none text-dark d-flex justify-content-between" href="{% url 'check_stage' project.pk s.ps.stage %}">
+    <b>{{ forloop.counter }}. {% stage project s.ps.stage %}</b><span class="small text-muted">{% tr s.ps.get_status_display %} ›</span>
+  </a>
+  <div class="mt-1">
+    {% for item, c in s.items %}<a href="{% url 'check_item' project.pk item.code %}" title="{{ item.title_en }}" class="me-1"><span class="dot {{ c.status }}"></span></a>{% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endwith %}
+{% endblock %}

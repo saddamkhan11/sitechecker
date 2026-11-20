@@ -1,0 +1,98 @@
+{% extends "base.html" %}{% load static cc %}
+{% block title %}Site diary{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h1 class="h5 m-0">{% t lang "Site diary" "Site diary" "سائٹ ڈائری" %}</h1>
+  <a href="{% url 'diary_report' project.pk %}" class="btn btn-sm btn-outline-dark">📄 {% t lang "Weekly report" "Haftawar report" "ہفتہ وار رپورٹ" %}</a>
+</div>
+
+{% if any_over %}<div class="alert alert-danger py-2 small">⚠ {% t lang "Material received is more than the estimate. Ask the mistri where it went." "Aaya hua material andaze se zyada hai. Mistri se poochein kahan laga." "آیا ہوا سامان اندازے سے زیادہ ہے۔ مستری سے پوچھیں کہاں لگا۔" %}</div>{% endif %}
+
+<div class="card p-2 mb-3">
+  <table class="table table-sm small mb-1">
+    <tr><th>{% t lang "Material" "Material" "سامان" %}</th><th class="text-end">{% t lang "Received" "Aaya" "آیا" %}</th><th class="text-end">{% t lang "Estimate" "Andaza" "اندازہ" %}</th><th class="text-end">%</th></tr>
+    {% for m in mats %}
+    <tr class="{% if m.over %}table-danger{% endif %}"><td>{% tr m.label %}</td><td class="text-end">{{ m.received.normalize }} {{ m.unit }}</td><td class="text-end">{{ m.estimate|default:"-" }}</td>
+      <td class="text-end">{% if m.pct is not None %}{{ m.pct }}%{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  <table class="table table-sm small mb-0">
+    {% for p in pays %}<tr><td>{% tr p.label %}</td><td class="text-end">{{ p.total|rs }}</td></tr>{% endfor %}
+    <tr class="fw-bold"><td>{% t lang "Total paid" "Kul adaigi" "کل ادائیگی" %}</td><td class="text-end">{{ pay_total|rs }}</td></tr>
+  </table>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card p-3 mb-3" id="diary-form">{% csrf_token %}
+  <b class="mb-2">+ {% t lang "New entry" "Nayi entry" "نئی اندراج" %}</b>
+  {% if form.non_field_errors %}<div class="alert alert-danger py-1 small">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="row g-2">
+    <div class="col-6"><label class="form-label small mb-0">{% t lang "Date" "Tareekh" "تاریخ" %}</label>{{ form.date }}</div>
+    <div class="col-6"><label class="form-label small mb-0">{% t lang "Type" "Qism" "قسم" %}</label>{{ form.kind }}</div>
+    <div class="col-6 f-material"><label class="form-label small mb-0">{% t lang "Material" "Material" "سامان" %}</label>{{ form.material }}</div>
+    <div class="col-6 f-material"><label class="form-label small mb-0">{% t lang "Quantity" "Miqdaar" "مقدار" %}</label>{{ form.quantity }}</div>
+    <div class="col-6 f-payment"><label class="form-label small mb-0">{% t lang "Paid for" "Kis cheez ki" "کس چیز کی" %}</label>{{ form.payment_type }}</div>
+    <div class="col-6 f-payment"><label class="form-label small mb-0">{% t lang "Amount (Rs)" "Raqam (Rs)" "رقم (روپے)" %}</label>{{ form.amount }}</div>
+    <div class="col-12 f-payment"><label class="form-label small mb-0">{% t lang "Paid to" "Kis ko" "کس کو" %}</label>{{ form.paid_to }}</div>
+    <div class="col-12"><label class="form-label small mb-0">{% t lang "Note" "Note" "نوٹ" %}</label>{{ form.note }}</div>
+    <div class="col-12"><label class="form-label small mb-0">📷 {% tr "Photo (optional)" %}</label>
+      <div class="d-flex gap-2 mb-1">
+        <button type="button" id="d-cam" class="btn btn-outline-dark btn-sm flex-fill">📷 {% tr "Camera" %}</button>
+        <button type="button" id="d-gal" class="btn btn-outline-dark btn-sm flex-fill">🖼️ {% tr "Gallery" %}</button>
+      </div>
+      <div id="d-file" class="d-none">{{ form.photo }}</div>
+      <img id="d-prev" class="rounded d-none" style="height:80px" alt="">
+    </div>
+  </div>
+  <button class="btn btn-brand w-100 mt-2">{% t lang "Save" "Save karein" "محفوظ کریں" %}</button>
+</form>
+
+{% regroup entries by date as days %}
+{% for d in days %}
+  <h2 class="h6 text-muted mt-2">{{ d.grouper|date:"D d M Y" }}</h2>
+  {% for e in d.list %}
+  <div class="card p-2 mb-1 small d-flex flex-row justify-content-between">
+    <div>
+      {% if e.kind == "material" %}🧱 {% tr e.get_material_display %}: <b>{{ e.quantity.normalize }}</b>
+      {% elif e.kind == "payment" %}💵 {% tr e.get_payment_type_display %}: <b>{{ e.amount|rs }}</b>{% if e.paid_to %} → {{ e.paid_to }}{% endif %}
+      {% elif e.kind == "photo" %}📷{% else %}📝{% endif %}
+      {% if e.note %}<div>{{ e.note }}</div>{% endif %}
+      {% if e.photo %}<a href="{{ e.photo.url }}" target="_blank"><img src="{{ e.photo.url }}" style="height:60px" class="rounded mt-1" alt=""></a>{% endif %}
+    </div>
+    <form method="post" action="{% url 'diary_delete' project.pk e.pk %}" onsubmit="return confirm('Delete?')">{% csrf_token %}<button class="btn btn-sm btn-link text-muted p-0">✖</button></form>
+  </div>
+  {% endfor %}
+{% empty %}
+  <p class="text-muted small">{% t lang "No entries yet." "Abhi koi entry nahi." "ابھی کوئی اندراج نہیں۔" %}</p>
+{% endfor %}
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/camera.js' %}?v={{ sv }}"></script>
+<script>
+(function () {
+  var fileInput = document.querySelector('#d-file input[type=file]'), prev = document.getElementById('d-prev');
+  PhotoPicker.attach({
+    cameraBtn: document.getElementById('d-cam'), galleryBtn: document.getElementById('d-gal'),
+    onPhoto: function (file) {
+      OfflineQueue.shrink(file, 1280, 0.8).then(function (b) {
+        if (PhotoPicker.fillInput(fileInput, b, 'diary.jpg')) { prev.src = URL.createObjectURL(b); prev.classList.remove('d-none'); }
+        else { document.getElementById('d-file').classList.remove('d-none'); }  // old browser: use the plain file box
+      });
+    }
+  });
+})();
+</script>
+<script>
+(function () {
+  var f = document.getElementById('diary-form');
+  f.querySelectorAll('input:not([type=file]):not([type=hidden]), select, textarea').forEach(function (x) { x.classList.add(x.tagName === 'SELECT' ? 'form-select' : 'form-control'); });
+  var kind = f.querySelector('[name=kind]');
+  function show() {
+    f.querySelectorAll('.f-material').forEach(function (x) { x.style.display = kind.value === 'material' ? '' : 'none'; });
+    f.querySelectorAll('.f-payment').forEach(function (x) { x.style.display = kind.value === 'payment' ? '' : 'none'; });
+  }
+  kind.onchange = show; show();
+})();
+</script>
+{% endblock %}

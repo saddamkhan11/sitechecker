@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+.pytest_cache/
+evals/photos/
+evals/results/
+android/node_modules/
+android/android/
+.claude/
+_deck_preview/
+static/_deck_preview.html
+*.log

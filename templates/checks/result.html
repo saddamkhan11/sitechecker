@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}Result{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+<a href="{% url 'check_item' project.pk item.code %}" class="small">← {% tfield item "title" %}</a>
+<div id="result" class="card p-3 mt-2 result-card {{ check.status }}" data-status="{{ check.status }}">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <span class="dot {{ check.status }}" style="width:22px;height:22px" id="r-dot"></span>
+    <b class="fs-5" id="r-label">{% tr check.get_status_display %}</b>
+  </div>
+  <div id="r-reason" class="{% if lang == 'ur' %}urdu{% endif %}">{% if check.status == "pending" %}{% t lang "Checking the photo... this takes a few seconds." "Tasveer check ho rahi hai... chand second." "تصویر چیک ہو رہی ہے... چند سیکنڈ۔" %}{% else %}{{ check.reason }}{% endif %}</div>
+  <div id="r-advice" class="mt-2 p-2 bg-light rounded {% if not check.advice %}d-none{% endif %} {% if lang == 'ur' %}urdu{% endif %}">🗣 <b>{% t lang "Tell the mistri" "Mistri ko kahein" "مستری سے کہیں" %}:</b> <span>{{ check.advice }}</span></div>
+  <div class="small text-muted mt-2">
+    {% if check.confidence is not None %}{% t lang "Confidence" "Yaqeen" "یقین" %}: <span id="r-conf">{% widthratio check.confidence 1 100 %}</span>% · {% endif %}
+    {% t lang "Server time" "Server waqt" "سرور وقت" %}: {{ check.created_at|date:"d M Y H:i" }}
+    {% if check.rule_snapshot %}<br>{% t lang "Rule used" "Istemal shuda rule" "استعمال شدہ رول" %}: {{ check.rule_snapshot|truncatechars:160 }}{% endif %}
+    {% if check.photo_source %}<br>{% tr "Photo source" %}:
+      {% if check.photo_source == "camera" %}📷 {% tr "Live camera" %}{% elif check.photo_source == "camera_app" %}📷 {% tr "Phone camera" %}{% else %}🖼️ {% tr "From gallery (not verified)" %}{% if check.photo_taken_at %} · {{ check.photo_taken_at|date:"d M Y" }}{% endif %}{% endif %}
+    {% endif %}
+  </div>
+  {% if check.photo_source == "gallery" %}
+  <div class="alert alert-warning small py-1 mt-2 mb-0">⚠ {% tr "Photo from the gallery: its date can not be verified." %}
+    {% if check.gallery_old_days %}<b>{{ check.gallery_old_days }} {% tr "days older than the upload: it may be an old photo." %}</b>{% endif %}</div>
+  {% endif %}
+  {% if check.measurements %}<div class="small mt-1">{% for k, v in check.measurements.items %}{{ k }}: <b>{{ v }}</b>{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+  {% if check.photo %}<img src="{{ check.photo.url }}" class="img-fluid rounded mt-2" alt="">{% endif %}
+</div>
+<a id="retake" href="{% url 'check_item' project.pk item.code %}" class="btn btn-brand w-100 mt-2 {% if not check.retake and check.status != 'red' %}d-none{% endif %}">📷 {% t lang "Take a new photo" "Nayi tasveer lein" "نئی تصویر لیں" %}</a>
+<p class="small text-muted mt-3">{% t lang "Green means 'no problem seen in this photo'. It is not an engineer's approval and never means 'safe' [GEN-01]." "Hara ka matlab 'is tasveer mein masla nazar nahi aaya'. Yeh engineer ki manzoori nahi, aur kabhi 'safe' ka matlab nahi [GEN-01]." "ہرا مطلب 'اس تصویر میں مسئلہ نظر نہیں آیا'۔ یہ انجینئر کی منظوری نہیں، اور کبھی 'محفوظ' کا مطلب نہیں [GEN-01]۔" %}</p>
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+{% if check.status == "pending" %}
+<script>
+(function () {
+  var tries = 0;
+  function poll() {
+    fetch('{% url "check_status" project.pk check.pk %}', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j.status === 'pending' && tries++ < 40) return setTimeout(poll, 2500);
+      location.reload();
+    }).catch(function () { setTimeout(poll, 5000); });
+  }
+  setTimeout(poll, 2000);
+})();
+</script>
+{% endif %}
+{% endblock %}

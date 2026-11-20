@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}Rules{% endblock %}
+{% block content %}
+<h1 class="h4">{% tr "Rules table" %}</h1>
+<div class="alert alert-warning small py-2">{% tr "These rules come from general practice. Rules not yet reviewed by an engineer say \"pending review\"." %}</div>
+{% regroup rules by get_category_display as groups %}
+{% for g in groups %}
+  {% if g.grouper != "Calculator constants" %}
+  <h2 class="h6 mt-3 text-muted text-uppercase">{% tr g.grouper %}</h2>
+  {% for r in g.list %}
+  <div class="card p-2 mb-2 small">
+    <div><b>{{ r.rule_id }}</b> {% if ui_lang != "ur" %}{{ r.title }}{% endif %}{% if r.value is not None %} — <b>{{ r.value.normalize }} {{ r.unit }}</b>{% endif %}
+      {% if r.engineer_reviewed %}<span class="badge bg-success">{% tr "reviewed" %}</span>{% else %}<span class="badge bg-secondary">{% tr "pending review" %}</span>{% endif %}</div>
+    {% if ui_lang != "ur" %}<div>{{ r.text_en }}</div>{% endif %}
+    {% if r.text_ur and ui_lang != "en" and ui_lang != "roman" %}<div class="urdu">{{ r.text_ur }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+{% endfor %}
+{% endblock %}

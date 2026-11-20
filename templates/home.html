@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% load cc %}
+{% block content %}
+<div class="hero">
+  <div class="hero-icon">🧱</div>
+  <h1>{% tr "Construction Checker" %}</h1>
+  <p class="lead">{% tr "Design a single-storey house, one room, a washroom or a kitchen by chat or voice, know the right material and cost, and check the mistri's work stage by stage." %}</p>
+  <div class="steps">
+    <div class="step"><b>🗣️</b>{% t "" "Tell what you want" "Batayein kya banana hai" "بتائیں کیا بنانا ہے" %}</div>
+    <div class="step"><b>📐</b>{% t "" "Get plan + material" "Naqsha aur material" "نقشہ اور سامان" %}</div>
+    <div class="step"><b>📷</b>{% t "" "Check each stage" "Har stage check" "ہر مرحلہ چیک" %}</div>
+  </div>
+  <div class="d-grid gap-2 mt-3">
+    <a class="btn btn-brand btn-lg" href="{% url 'signup' %}">{% tr "New account" %} →</a>
+    <a class="btn btn-outline-dark btn-lg" href="{% url 'login' %}">{% tr "Login" %}</a>
+  </div>
+</div>
+
+<div class="row g-2 mt-3">
+  <div class="col-12 col-sm-6"><div class="card feature"><div class="ico">💬</div><div><b>{% tr "Chat and voice" %}</b><span>{% tr "Speak or type; the agent does the work" %}</span></div></div></div>
+  <div class="col-12 col-sm-6"><div class="card feature"><div class="ico">📐</div><div><b>{% tr "Plan" %}</b><span>{% tr "Whole house, rooms, washroom, printable" %}</span></div></div></div>
+  <div class="col-12 col-sm-6"><div class="card feature"><div class="ico">🧮</div><div><b>{% tr "Material" %}</b><span>{% tr "Bricks, cement, sand, crush, steel" %}</span></div></div></div>
+  <div class="col-12 col-sm-6"><div class="card feature"><div class="ico">📷</div><div><b>{% tr "Camera check" %}</b><span>{% tr "Photo check at every stage" %}</span></div></div></div>
+</div>
+<p class="small text-muted mt-3 px-1">{% tr "Single-storey building (80 to 1500 sq ft), brick walls, RCC slab. The app never says a structure is \"safe\": it says what it checked and what it found. A bigger or double-storey building needs an engineer." %}</p>
+{% endblock %}

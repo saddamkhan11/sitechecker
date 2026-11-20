@@ -1,0 +1,13 @@
+{
+  "appId": "pk.constructionchecker.app",
+  "appName": "Site Checker",
+  "webDir": "www",
+  "server": {
+    "url": "https://example.com/p/",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

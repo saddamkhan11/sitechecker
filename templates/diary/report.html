@@ -1,0 +1,58 @@
+{% extends "base.html" %}{% load cc %}
+{% block title %}Report {{ date_from|date:"d M" }} - {{ date_to|date:"d M Y" }}{% endblock %}
+{% block head %}<style>@media print { body { font-size: 10.5px; } .table td, .table th { padding: 1px 4px; } }</style>{% endblock %}
+{% block content %}
+<form class="no-print d-flex gap-2 align-items-end mb-3" method="get">
+  <div><label class="small">{% tr "From" %}</label><input type="date" name="from" value="{{ date_from|date:'Y-m-d' }}" class="form-control form-control-sm"></div>
+  <div><label class="small">{% tr "To" %}</label><input type="date" name="to" value="{{ date_to|date:'Y-m-d' }}" class="form-control form-control-sm"></div>
+  <button class="btn btn-sm btn-outline-dark">{% tr "Show" %}</button>
+  <button type="button" class="btn btn-sm btn-brand ms-auto" onclick="window.print()">⬇ PDF</button>
+</form>
+
+<div class="d-flex justify-content-between border-bottom pb-1 mb-2">
+  <div><b class="fs-6">{% tr "Site report" %}</b><br>{{ project.name }} · {{ project.owner.name|default:project.owner.phone }}</div>
+  <div class="text-end small">{{ date_from|date:"d M Y" }} – {{ date_to|date:"d M Y" }}<br>{% tr "Stage now" %}: {% stage project %}</div>
+</div>
+
+<div class="row g-2">
+  <div class="col-7">
+    <b class="small">{% tr "Material" %}</b>
+    <table class="table table-sm table-bordered small mb-2">
+      <tr><th></th><th class="text-end">{% tr "This period" %}</th><th class="text-end">{% tr "Total received" %}</th><th class="text-end">{% tr "Estimate" %}</th><th class="text-end">{% tr "Used %" %}</th></tr>
+      {% for m in mats_all %}
+      <tr class="{% if m.over %}table-danger{% endif %}">
+        <td>{% tr m.label %} ({{ m.unit }})</td>
+        <td class="text-end">{% for x in mats_period %}{% if x.material == m.material %}{{ x.received.normalize }}{% endif %}{% endfor %}</td>
+        <td class="text-end">{{ m.received.normalize }}</td><td class="text-end">{{ m.estimate|default:"-" }}</td>
+        <td class="text-end">{% if m.pct is not None %}{{ m.pct }}%{% if m.over %} ⚠{% endif %}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="col-5">
+    <b class="small">{% tr "Payments this period" %}</b>
+    <table class="table table-sm table-bordered small mb-2">
+      {% for p in pays %}<tr><td>{% tr p.label %}</td><td class="text-end">{{ p.total|rs }}</td></tr>{% endfor %}
+      <tr class="fw-bold"><td>{% tr "Total" %}</td><td class="text-end">{{ pay_total|rs }}</td></tr>
+      {% if est and est.cost.total %}<tr><td class="text-muted">{% tr "Material estimate (all)" %}</td><td class="text-end text-muted">{{ est.cost.total|rs }}</td></tr>{% endif %}
+    </table>
+  </div>
+</div>
+
+<b class="small">{% tr "Checks this period" %}</b>
+<table class="table table-sm table-bordered small mb-2">
+  {% for c in checks %}
+  <tr><td style="width:70px">{{ c.created_at|date:"d M H:i" }}</td><td><span class="dot {{ c.status }}"></span> {% tr c.get_status_display %}{% if c.photo_source == "gallery" %} 🖼️{% endif %}</td><td>{% tfield c.item "title" %}</td><td>{{ c.reason|truncatechars:110 }}</td></tr>
+  {% empty %}<tr><td class="text-muted">{% tr "No checks in this period." %}</td></tr>{% endfor %}
+</table>
+
+<b class="small">{% tr "Diary" %}</b>
+<table class="table table-sm table-bordered small mb-2">
+  {% for e in entries %}
+  <tr><td style="width:70px">{{ e.date|date:"d M" }}</td><td>{% tr e.get_kind_display %}</td>
+    <td>{% if e.kind == "material" %}{% tr e.get_material_display %}: {{ e.quantity.normalize }}{% elif e.kind == "payment" %}{% tr e.get_payment_type_display %}: {{ e.amount|rs }} {{ e.paid_to }}{% endif %} {{ e.note|truncatechars:90 }}</td></tr>
+  {% empty %}<tr><td class="text-muted">{% tr "No diary entries in this period." %}</td></tr>{% endfor %}
+</table>
+
+<p class="text-muted" style="font-size:9.5px">Construction Checker · {{ today|date:"d M Y" }}. {% tr "Photo results mean \"no problem seen in this photo\" — they are not an engineer's approval and never mean \"safe\". Quantities are estimates from the Rules table; rules marked pending need engineer review." %}</p>
+{% endblock %}

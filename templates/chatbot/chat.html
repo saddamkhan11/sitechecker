@@ -1,0 +1,142 @@
+{% extends "base.html" %}{% load static cc %}
+{% block title %}Chat{% endblock %}
+{% block content %}
+{% with lang=project.language %}
+{% if not ai_on %}
+  <div class="alert alert-secondary small py-1">{% t lang "AI is off (no GROQ_API_KEY): answers come straight from the Rules table." "AI band hai (GROQ_API_KEY nahi): jawab seedha Rules table se aayenge." "اے آئی بند ہے: جواب سیدھا رولز ٹیبل سے آئیں گے۔" %}</div>
+{% endif %}
+<div id="chat" class="chat-box">
+  {% for m in chat_messages %}
+    <div class="msg {{ m.role }}" data-lang="{{ m.language }}">{% if m.meta.voice %}🎤 {% endif %}{{ m.text }}{% if m.role == "assistant" %}{% for b in m.meta.ui %}<a class="btn btn-sm btn-outline-dark mt-1 me-1 ui-btn" href="{{ b.url }}">{{ b.label }}</a>{% endfor %}<span class="src">{{ m.get_source_display }}{% if m.meta.tools %} · {{ m.meta.tools|length }} action(s){% endif %}</span>{% endif %}</div>
+  {% endfor %}
+</div>
+
+<div id="voice-state" class="text-center small text-muted d-none my-1"></div>
+<form id="chat-form" method="post" action="{% url 'chat_send' project.pk %}" class="chat-input d-flex gap-2 align-items-center">{% csrf_token %}
+  {% if voice_on %}<button type="button" id="mic" class="btn btn-outline-dark btn-lg px-3" title="Bol kar poochein">🎤</button>{% endif %}
+  <input id="chat-text" name="text" class="form-control form-control-lg" autocomplete="off" required maxlength="1000"
+         placeholder="{% t lang 'Type or speak...' 'Likhein ya bolein...' 'لکھیں یا بولیں...' %}">
+  <button class="btn btn-brand px-3">➤</button>
+</form>
+<div class="small d-flex flex-row flex-wrap gap-2 align-items-center mb-1" id="lang-bar">
+  <label class="d-flex align-items-center gap-1 m-0">✍️ <span>{% t lang "Typing" "Likhna" "لکھنا" %}</span>
+    <select id="lang-typing" class="form-select form-select-sm" style="width:auto">
+      {% for v, l in languages %}<option value="{{ v }}" {% if project.language == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select></label>
+  {% if voice_on %}
+  <label class="d-flex align-items-center gap-1 m-0">🎤 <span>{% t lang "Speaking" "Bolna" "بولنا" %}</span>
+    <select id="lang-voice" class="form-select form-select-sm" style="width:auto">
+      {% for v, l in voice_languages %}<option value="{{ v }}" {% if project.voice_language == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select></label>
+  {% endif %}
+  <span id="lang-saved" class="text-success d-none">✔</span>
+</div>
+{% if voice_on %}
+<div class="d-flex justify-content-between small mb-1">
+  <label class="form-check-label"><input type="checkbox" id="speak-on" class="form-check-input"> 🔊 {% t lang "Read replies aloud" "Jawab bol kar sunayein" "جواب بول کر سنائیں" %}</label>
+  <label class="form-check-label"><input type="checkbox" id="convo" class="form-check-input"> 🎧 {% t lang "Hands-free talk" "Baghair haath baat cheet" "بغیر ہاتھ بات چیت" %}</label>
+</div>
+{% endif %}
+<div class="d-flex flex-wrap gap-1 small" id="chips">
+  {% if not project.onboarded %}
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="{% if project.language == 'en' %}5 marla plot, 2 bedroom house{% else %}5 marla plot par 2 bedroom ghar{% endif %}">{% tr "5 marla plot, 2 bedroom house" %}</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="{% if project.language == 'en' %}Only one washroom 5x7{% else %}Sirf ek washroom 5x7{% endif %}">{% tr "Only one washroom 5x7" %}</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="{% if project.language == 'en' %}One room 12x14{% else %}Ek kamra 12x14{% endif %}">{% tr "One room 12x14" %}</button>
+  {% else %}
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="{% if project.language == 'en' %}How many bricks will it take?{% else %}Kitni eent lagengi?{% endif %}">{% tr "How many bricks will it take?" %}</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="{% if project.language == 'en' %}Add one more washroom{% else %}Ek washroom aur add karo{% endif %}">{% tr "Add one more washroom" %}</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="{% if project.language == 'en' %}How deep should the foundation be?{% else %}Bunyad kitni gehri ho?{% endif %}">{% tr "How deep should the foundation be?" %}</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary chip" data-say="Lanter mein sariye ka faasla kitna ho?">{% tr "Steel bar spacing in the slab?" %}</button>
+  {% endif %}
+</div>
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/voice.js' %}?v={{ sv }}"></script>
+<script>
+(function () {
+  var box = document.getElementById('chat'), form = document.getElementById('chat-form'), input = document.getElementById('chat-text');
+  var csrf = form.csrfmiddlewaretoken.value;
+  function add(role, text, lang, src, ui) {
+    var d = document.createElement('div');
+    d.className = 'msg ' + role; d.dataset.lang = lang || ''; d.textContent = text;
+    (ui || []).forEach(function (b) { var a = document.createElement('a'); a.className = 'btn btn-sm btn-outline-dark mt-1 me-1 ui-btn'; a.href = b.url; a.textContent = b.label; d.appendChild(a); });
+    if (src) { var s = document.createElement('span'); s.className = 'src'; s.textContent = src; d.appendChild(s); }
+    box.appendChild(d); window.scrollTo(0, document.body.scrollHeight); return d;
+  }
+  function isUrdu(t) { return /[؀-ۿ]/.test(t); }
+  function after(j) { if (j.onboarded_now) setTimeout(function () { location.reload(); }, 2500); }
+  window.scrollTo(0, document.body.scrollHeight);
+  document.querySelectorAll('.chip').forEach(function (b) { b.onclick = function () { input.value = b.dataset.say || b.textContent; form.requestSubmit(); }; });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var text = input.value.trim(); if (!text) return;
+    if (!navigator.onLine) { add('assistant', 'Internet nahi hai. Signal aane par dobara bhejein. / انٹرنیٹ نہیں ہے۔', ''); return; }
+    add('user', text, isUrdu(text) ? 'ur' : '');
+    input.value = ''; input.disabled = true;
+    var wait = add('assistant', '', ''); wait.classList.add('typing'); wait.innerHTML = '<i></i><i></i><i></i>';
+    var fd = new FormData(form); fd.set('text', text);
+    fetch(form.action, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        wait.remove();
+        add('assistant', j.text || 'Error', j.lang, j.source, j.ui);
+        if (voice && speakOn()) voice.speak(j.speak, j.lang);
+        after(j);
+      })
+      .catch(function () { wait.textContent = 'Jawab nahi aaya. Dobara koshish karein.'; })
+      .finally(function () { input.disabled = false; input.focus(); });
+  });
+
+  // ---- language picker (typing + speaking) ----
+  var PLACEHOLDER = { roman: 'Roman Urdu mein likhein ya bolein...', ur: 'اردو میں لکھیں یا بولیں...', en: 'Type or speak in English...' };
+  function saveLang() {
+    var fd = new FormData();
+    fd.append('csrfmiddlewaretoken', csrf);
+    var t = document.getElementById('lang-typing'), v = document.getElementById('lang-voice');
+    if (t) fd.append('language', t.value);
+    if (v) fd.append('voice_language', v.value);
+    fetch('{% url "chat_language" project.pk %}', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        input.placeholder = PLACEHOLDER[j.language] || input.placeholder;
+        input.dir = j.language === 'ur' ? 'rtl' : 'ltr';
+        var ok = document.getElementById('lang-saved'); ok.classList.remove('d-none'); setTimeout(function () { ok.classList.add('d-none'); }, 1500);
+      });
+  }
+  ['lang-typing', 'lang-voice'].forEach(function (id) { var el = document.getElementById(id); if (el) el.onchange = saveLang; });
+  input.placeholder = PLACEHOLDER['{{ project.language }}'] || input.placeholder;
+  input.dir = '{{ project.language }}' === 'ur' ? 'rtl' : 'ltr';
+
+  // ---- voice ----
+  var mic = document.getElementById('mic'), stateEl = document.getElementById('voice-state');
+  var speakBox = document.getElementById('speak-on'), convo = document.getElementById('convo');
+  function pref(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v === '1'; } catch (e) { return d; } }
+  function setPref(k, v) { try { localStorage.setItem(k, v ? '1' : '0'); } catch (e) {} }
+  function speakOn() { return speakBox && speakBox.checked; }
+  var voice = null;
+  if (mic) {
+    if (!VoiceAgent.supported()) { mic.disabled = true; mic.title = 'Is browser mein mic recording nahi'; }
+    speakBox.checked = pref('cc-speak', true); speakBox.onchange = function () { setPref('cc-speak', speakBox.checked); };
+    var labels = { listening: '🔴 Sun raha hoon... / سن رہا ہوں', thinking: '⏳ Soch raha hoon... / سوچ رہا ہوں', speaking: '🔊 Bol raha hoon... / بول رہا ہوں' };
+    voice = new VoiceAgent({
+      url: '{% url "chat_voice" project.pk %}', csrf: csrf, maxSeconds: {{ max_seconds }}, speakOn: speakOn,
+      onState: function (s) {
+        mic.classList.toggle('btn-danger', s === 'listening'); mic.classList.toggle('btn-outline-dark', s !== 'listening');
+        stateEl.classList.toggle('d-none', s === 'idle'); stateEl.textContent = labels[s] || '';
+      },
+      onResult: function (j) {
+        add('user', '🎤 ' + j.transcript, isUrdu(j.transcript) ? 'ur' : '');
+        add('assistant', j.text, j.lang, j.source, j.ui);
+        after(j);
+      },
+      onError: function (msg) { if (msg) add('assistant', msg, ''); if (convo.checked && !msg) setTimeout(function () { voice.start(); }, 600); }
+    });
+    mic.onclick = function () { voice.toggle(); };
+    convo.onchange = function () { voice.conversation = convo.checked; if (convo.checked) { speakBox.checked = true; voice.start(); } else { voice.stop(); } };
+    if (window.speechSynthesis) speechSynthesis.getVoices(); // load voice list early
+  }
+})();
+</script>
+{% endblock %}

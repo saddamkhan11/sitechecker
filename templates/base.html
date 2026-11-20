@@ -1,0 +1,81 @@
+{% load static cc %}<!doctype html>
+<html lang="{% if ui_lang == 'ur' %}ur{% else %}en{% endif %}" dir="{% if ui_rtl %}rtl{% else %}ltr{% endif %}" class="ui-{{ ui_lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b45309">
+  <title>{% block title %}Construction Checker{% endblock %}</title>
+  <link rel="manifest" href="{% url 'manifest' %}">
+  <link rel="icon" href="{% static 'icons/icon.svg' %}" type="image/svg+xml">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600&display=swap" rel="stylesheet">
+  <link href="{% static 'css/app.css' %}?v={{ sv }}" rel="stylesheet">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+  <nav class="navbar navbar-dark bg-brand sticky-top no-print">
+    <div class="container-fluid px-3">
+      <a class="navbar-brand fw-semibold" href="{% if user.is_authenticated %}{% url 'project_list' %}{% else %}{% url 'home' %}{% endif %}"><span class="brand-mark">🧱</span>Site Checker</a>
+      <div class="d-flex align-items-center gap-2">
+        <form method="post" action="{% url 'set_ui_language' %}" class="m-0">{% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <select name="ui_language" class="form-select form-select-sm ui-lang" aria-label="Language / زبان" onchange="this.form.submit()">
+            {% for v, l in ui_choices %}<option value="{{ v }}" {% if ui_lang == v %}selected{% endif %}>🌐 {{ l }}</option>{% endfor %}
+          </select>
+        </form>
+        <span id="net-badge" class="badge bg-secondary d-none">{% tr "Offline" %}</span>
+        <span id="queue-badge" class="badge bg-warning text-dark d-none"></span>
+        {% if user.is_authenticated %}
+          <form method="post" action="{% url 'logout' %}" class="m-0">{% csrf_token %}<button class="btn btn-sm btn-outline-light">{% tr "Logout" %}</button></form>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  {% if project and project.onboarded %}
+  <div class="project-strip no-print">
+    <div class="container px-3 py-2 small d-flex justify-content-between">
+      <a href="{% url 'project_detail' project.pk %}" class="text-decoration-none text-dark fw-semibold text-truncate">{{ project.name }}</a>
+      <span class="text-muted text-nowrap ms-2">{% tr "Stage" %}: {% stage project %}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <main class="container px-3 py-3 {% block mainclass %}{% endblock %}">
+    {% for m in messages %}
+      <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags|default:'info' }}{% endif %} py-2">{{ m }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+
+  {% if project and project.onboarded %}
+  <nav class="bottom-nav no-print">
+    {% with r=request.resolver_match.url_name %}
+    <a href="{% url 'project_detail' project.pk %}" class="{% if r == 'project_detail' %}active{% endif %}"><span>🏠</span>{% t project.language "Home" "Home" "ہوم" %}</a>
+    <a href="{% url 'chat' project.pk %}" class="{% if r == 'chat' %}active{% endif %}"><span>💬</span>{% t project.language "Chat" "Chat" "چیٹ" %}</a>
+    <a href="{% url 'plan_editor' project.pk %}" class="{% if 'plan' in r %}active{% endif %}"><span>📐</span>{% t project.language "Plan" "Naqsha" "نقشہ" %}</a>
+    <a href="{% url 'materials' project.pk %}" class="{% if r == 'materials' %}active{% endif %}"><span>🧮</span>{% t project.language "Material" "Material" "سامان" %}</a>
+    <a href="{% url 'check_stages' project.pk %}" class="{% if 'check' in r %}active{% endif %}"><span>📷</span>{% t project.language "Checks" "Checks" "جانچ" %}</a>
+    <a href="{% url 'diary' project.pk %}" class="{% if 'diary' in r %}active{% endif %}"><span>📒</span>{% t project.language "Diary" "Diary" "ڈائری" %}</a>
+    {% endwith %}
+  </nav>
+  {% endif %}
+
+  <script>
+    // Strings that scripts show (camera screen), in the website language.
+    window.CC_T = (function () {
+      var m = {
+        "Take photo": "{% tr 'Take photo' %}",
+        "Hold the phone steady, then press the round button": "{% tr 'Hold the phone steady, then press the round button' %}"
+      };
+      return function (en) { return m[en] || en; };
+    })();
+  </script>
+  <script src="{% static 'js/offline-queue.js' %}?v={{ sv }}"></script>
+  <script>
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('{% url "service_worker" %}').catch(function () {}); }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

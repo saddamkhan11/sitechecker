@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% load static cc %}
+{% block title %}Plan - {{ project.name }}{% endblock %}
+{% block content %}
+<div class="no-print d-flex gap-2 mb-3">
+  <button class="btn btn-brand" onclick="window.print()">⬇ {% tr "Download PDF / Print" %}</button>
+  <a class="btn btn-outline-dark" href="{% url 'plan_editor' project.pk %}">← {% tr "Edit" %}</a>
+</div>
+<p class="no-print small text-muted">{% tr "In the print dialog choose \"Save as PDF\"." %}</p>
+
+<div class="print-sheet">
+  <div class="d-flex justify-content-between border-bottom pb-1 mb-2">
+    <div><b>{{ project.name }} · {% tr "Plan" %}</b><br><span class="small">{{ project.city }} · Plan v{{ plan.version }} · {{ plan.created_at|date:"d M Y" }}</span></div>
+    <div class="text-end small">{% tr project.get_project_type_display %} · {{ summary.rooms|length }} {% tr "room(s)" %} · {{ summary.covered_area_sqft }} sq ft {% tr "covered" %}<br>
+      {% tr "Outside" %} {{ summary.outer_size_ft }} ft{% if summary.plot_ft %} · Plot {{ summary.plot_ft }} ft{% endif %} · {% tr "Walls" %} {{ plan_data.wall_in }}" · RCC</div>
+  </div>
+  <svg id="plan-svg" xmlns="http://www.w3.org/2000/svg" style="max-height:62vh"></svg>
+
+  <div class="row small mt-2">
+    <div class="col-6">
+      <b>{% tr "Rooms" %}</b>
+      <table class="table table-sm table-bordered mb-1">
+        <tr><th>{% tr "Room" %}</th><th>{% tr "Inside size (ft)" %}</th><th>{% tr "Area" %}</th></tr>
+        {% for r in summary.rooms %}<tr><td>{{ r.name }}</td><td>{{ r.size_ft }}</td><td>{{ r.area_sqft }} sq ft</td></tr>{% endfor %}
+      </table>
+      <b>{% tr "Doors and windows" %}</b>
+      <table class="table table-sm table-bordered mb-1">
+        <tr><th>ID</th><th>{% tr "Room" %}</th><th>{% tr "Wall" %}</th><th>{% tr "From corner" %}</th><th>W x H</th><th>{% tr "Lintel" %}</th></tr>
+        {% for o in openings %}
+        <tr><td>{{ o.id|upper }}</td><td>{{ o.room_name }}</td><td>{{ o.wall }}</td><td>{{ o.offset_in|ft_in }}</td><td>{{ o.width_in|ft_in }} x {{ o.height_in|ft_in }}</td>
+            <td>{{ o.lintel_in|ft_in }}</td></tr>
+        {% endfor %}
+      </table>
+      <div class="text-muted" style="font-size:10px">{% tr "\"From corner\" = from the room's top-left inside corner (N/S walls from the left, E/W walls from the top). Lintel length includes the bearing on each side." %} ({{ rules|get:"OPN-01"|default:8 }}" [OPN-01])</div>
+    </div>
+    <div class="col-6">
+      <b>{% tr "Construction notes (Rules table)" %}</b>
+      <ul class="ps-3 mb-0">
+        <li>{% tr "Trench depth" %}: {{ rules|get:"FND-01" }}" · {% tr "Trench width" %}: {{ rules|get:"FND-02" }}" [FND-01, FND-02]</li>
+        <li>{% tr "PCC bed" %} 1:4:8: {{ rules|get:"FND-03" }}" · {% tr "Foundation brickwork" %}: {{ rules|get:"FND-04" }}" [FND-03, FND-04]</li>
+        <li>{% tr "Plinth above ground" %}: {{ rules|get:"PLN-01" }}" · {% tr "DPC" %}: {{ rules|get:"PLN-02" }}" [PLN-01, PLN-02]</li>
+        <li>{% tr "Wall thickness" %}: {{ rules|get:"WALL-01" }}" · 1:6 · {% tr "Mortar joint (max)" %}: {{ rules|get:"WALL-03" }}" [WALL-01, WALL-03]</li>
+        <li>{% tr "Lintel depth" %}: {{ rules|get:"OPN-02" }}" · 4 × 3/8" [OPN-02]</li>
+        <li>{% tr "Slab thickness" %}: {{ rules|get:"SLB-01" }}" · 1:2:4 · {% tr "Main bars spacing" %} 1/2": {{ rules|get:"SST-01" }}" · {% tr "Distribution bars spacing" %} 3/8": {{ rules|get:"SST-02" }}" [SLB-01, SST-01, SST-02]</li>
+        <li>{% tr "Cover under steel" %}: {{ rules|get:"SST-03" }}" · {% tr "Props apart (max)" %}: {{ rules|get:"SST-04" }} ft · {% tr "Keep props" %}: {{ rules|get:"SLB-05" }} {% tr "days" %} [SST-03, SST-04, SLB-05]</li>
+        <li>{% tr "Cure slab" %}: ≥ {{ rules|get:"CUR-01" }} {% tr "days" %} [CUR-01]</li>
+      </ul>
+    </div>
+  </div>
+  <div class="small mt-2">
+    <b>{% tr "Plan checks" %}:</b>
+    {% for f in findings %}<span class="finding-{{ f.level }}">{% if f.level == "ok" %}✔{% elif f.level == "error" %}✖{% else %}⚠{% endif %} {% tdict f %}{% if f.rule_id %} [{{ f.rule_id }}]{% endif %}</span>{% if not forloop.last %} · {% endif %}{% endfor %}
+  </div>
+  <p class="text-muted mt-2" style="font-size:10px">{% tr "This is a setting-out plan, not a structural design. Rules marked pending need engineer review. The app never certifies a structure as safe." %}</p>
+</div>
+{{ plan_data|json_script:"plan-data" }}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/plan.js' %}?v={{ sv }}"></script>
+<script>PlanDrawing.render(document.getElementById('plan-svg'), JSON.parse(document.getElementById('plan-data').textContent), {});</script>
+{% endblock %}
